@@ -2,7 +2,8 @@ import pygame
 import sys
 import random
 import cv2
-import threading
+
+import time 
 
 pygame.init()
 width = 180
@@ -29,6 +30,88 @@ input_active = False
 input_text = ""
 font = pygame.font.SysFont(None, 24)
 input_box_rect = pygame.Rect(10, 10, 200, 30)
+
+def menu():
+    title_font = pygame.font.SysFont(None, 72)
+    button_font = pygame.font.SysFont(None, 48)
+    info_font = pygame.font.SysFont(None, 24)
+    
+    play_button = pygame.Rect(screenWidth // 2 - 100, screenHeight // 2 - 50, 200, 50)
+    quit_button = pygame.Rect(screenWidth // 2 - 100, screenHeight // 2 + 20, 200, 50)
+    
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = pygame.mouse.get_pos()
+                if play_button.collidepoint(mx, my):
+                    return
+                elif quit_button.collidepoint(mx, my):
+                    pygame.quit()
+                    sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_h:
+                    show_keybinds()
+        
+        grd.fill((0, 0, 0))
+        title_text = title_font.render("SAND SIMULATOR", True, (255, 255, 255))
+        grd.blit(title_text, (screenWidth // 2 - title_text.get_width() // 2, screenHeight // 4 - title_text.get_height() // 2))
+        
+        pygame.draw.rect(grd, (100, 100, 255), play_button)
+        play_text = button_font.render("Play", True, (255, 255, 255))
+        grd.blit(play_text, (play_button.centerx - play_text.get_width() // 2, play_button.centery - play_text.get_height() // 2))
+        
+        pygame.draw.rect(grd, (255, 100, 100), quit_button)
+        quit_text = button_font.render("Quit", True, (255, 255, 255))
+        grd.blit(quit_text, (quit_button.centerx - quit_text.get_width() // 2, quit_button.centery - quit_text.get_height() // 2))
+        
+        info_text = info_font.render("Press H to show all keybinds", True, (200, 200, 200))
+        grd.blit(info_text, (screenWidth // 2 - info_text.get_width() // 2, screenHeight - 40))
+        
+        pygame.display.flip()
+        pygame.time.Clock().tick(60)
+
+def show_keybinds():
+    info_font = pygame.font.SysFont(None, 28)
+    lines = [
+        "Keybinds:",
+        "1-9: Change brush radius",
+        "R: Red sand",
+        "G: Green sand",
+        "B: Blue sand",
+        "S: Sand (default)",
+        "W: White sand",
+        "0: Black sand",
+        "C: Custom color (after input)",
+        "E: Toggle eraser mode",
+        "P: Pixelize picture from webcam",
+        "Enter: Activate custom color input",
+        "ESC: Return to menu"
+    ]
+    
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return
+        
+        grd.fill((0, 0, 0))
+        y_offset = 50
+        for line in lines:
+            text_surf = info_font.render(line, True, (255, 255, 255))
+            grd.blit(text_surf, (20, y_offset))
+            y_offset += 30
+        
+        prompt = info_font.render("Press ESC to return to menu", True, (255, 255, 0))
+        grd.blit(prompt, (screenWidth // 2 - prompt.get_width() // 2, screenHeight - 60))
+        
+        pygame.display.flip()
+        pygame.time.Clock().tick(60)
 
 class cellState:
     def __init__(self, colorkey=pygame.K_s, rgb=None):
@@ -90,7 +173,6 @@ def placeSand():
     return mouse_pressed
 
 def erase_particles(centerx, centery, radius):
-    """Erase particles in a circular area"""
     if radius == 1:
         if 0 <= centerx < width and 0 <= centery < height:
             canvas[centerx][centery] = None
@@ -187,16 +269,58 @@ def pixelizepic():
     
     grd.fill((255, 255, 255))
     pygame.display.flip()
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    cap.release()
-    grd.fill((0, 0, 0))
-    pygame.display.flip()
 
-    if not ret:
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    try:
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)  
+        cap.set(cv2.CAP_PROP_GAIN, 0)
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1.0)  
+    except Exception:
+        pass
+
+    frame = None
+    start_t = time.time()
+    while time.time() - start_t < 1.2:
+        ret, tmp = cap.read()
+        if ret:
+            frame = tmp
+
+    cap.release()
+
+    def mean_brightness(img):
+        if img is None:
+            return 0
+        return float(img.mean())
+
+    if frame is None or mean_brightness(frame) < 20:
+        try:
+            alt_cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            alt_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            alt_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            try:
+                alt_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
+                alt_cap.set(cv2.CAP_PROP_GAIN, 0)
+            except Exception:
+                pass
+            alt_frame = None
+            start_t = time.time()
+            while time.time() - start_t < 1.2:
+                ret, tmp = alt_cap.read()
+                if ret:
+                    alt_frame = tmp
+            alt_cap.release()
+            if alt_frame is not None and mean_brightness(alt_frame) > mean_brightness(frame if frame is not None else 0):
+                frame = alt_frame
+        except Exception:
+            pass
+
+    if frame is None:
         print("Failed to take image from camera.")
         return
-    
+
     loadingtxt = font2.render("Creating Image!", True, (255, 255, 255))
     grd.fill((0,0,0))
     grd.blit(loadingtxt, (screenWidth // 2 - loadingtxt.get_width() // 2, screenHeight // 2 - loadingtxt.get_height() // 2))
@@ -211,17 +335,17 @@ def pixelizepic():
     for y in reversed(range(height)):
         for x in range(width):
             color = tuple(frame_rgb[y][x])
-            pixel_queue.append((x, color))
+            pixel_queue.append((x, y, color))
     
     while pixel_queue:
         for _ in range(min(pixels_per_frame, len(pixel_queue))):
             if pixel_queue:
-                x, color = pixel_queue.pop(0)
-                canvas[x][0] = cellState(colorkey=pygame.K_c, rgb=color)
+                x, y, color = pixel_queue.pop(0)
+                canvas[x][y] = cellState(colorkey=pygame.K_c, rgb=color)
         
         lateralAcceleration()
         newtonize()
-        grd.fill((0, 0, 0))
+        grd.fill((255, 255, 255))
         drawGrid()
         pygame.display.flip()
         clock.tick(60)
@@ -229,6 +353,8 @@ def pixelizepic():
 clock = pygame.time.Clock()
 needs_redraw = True
 running = True
+
+menu()
 
 while running:
     for event in pygame.event.get():
